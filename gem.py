@@ -390,9 +390,10 @@ def main():
     parser.add_argument("--colors", default="black and white",
                         help="Farbpalette (z.B. 'neon orange and deep black')")
     parser.add_argument("--tags",
-                        default="A dark luxury cyberpunk lighter-cover with glowing orange neon elements and elegant typography.",
+                        default="A colorful luxury cyberpunk lighter-cover with glowing orange neon elements and elegant typography.",
                         help="Zusätzliche Tags als Basis für das Design")
     parser.add_argument("--output_dir",
+                        default="output",
                         help="Folder/Dir to save the genrated content to")
 
     # Liest die Argumente aus der Kommandozeile
@@ -440,7 +441,7 @@ def main():
         args.typo = ask_user("Welcher Typografie-Stil soll genutzt werden?", args.typo)
         args.colors = ask_user("Wie lautet die Farbpalette?", args.colors)
         args.tags = ask_user("Zusätzliche Freitext-Beschreibung?", args.tags)
-        args.tags = ask_user("In welchem Hefter soll das resultet gespeichert werden?", args.output_dir)
+        args.tags = ask_user("In welcher Dir soll das resultet gespeichert werden?", args.output_dir)
         print("\n" + "=" * 40 + "\n")
 
     # 1. Bilder laden
