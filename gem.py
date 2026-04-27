@@ -5,13 +5,17 @@ from google import genai
 import dotenv
 from google.genai import types
 import argparse
-import os
+
 import requests
 from io import BytesIO
 from PIL import Image
-from prompt_toolkit import prompt
-dotenv.load_dotenv()
 
+import os
+import vtracer
+from svglib.svglib import svg2rlg
+from reportlab.graphics import renderPS
+
+dotenv.load_dotenv()
 
 
 
@@ -184,6 +188,7 @@ def run_generation_pipeline(images, theme, bg_texture, math_rule, product_name, 
     # 2. Definiere die finalen Speicherpfade
     image_save_path = os.path.join(run_dir, "img.jpg")
     json_save_path = os.path.join(run_dir, "args.json")
+    vec_save_path = os.path.join(run_dir, "vec.eps")
 
     # 3. Bild generieren
     result = generate_cover_image(prompt, gem_api_key)
@@ -202,6 +207,12 @@ def run_generation_pipeline(images, theme, bg_texture, math_rule, product_name, 
         # Speichere das Dictionary als schön formatierte JSON-Datei
         with open(json_save_path, "w", encoding="utf-8") as f:
             json.dump(args_dict, f, indent=4, ensure_ascii=False)
+
+        # save vector image
+        convert_to_vector_eps(
+            input_path=image_save_path,
+            output_eps_path=vec_save_path,
+        )
 
         print(f"[SAVE] ✅ Setup-Parameter gespeichert unter: {json_save_path}")
     except Exception as e:
@@ -302,6 +313,51 @@ def ask_user(frage: str, default_wert: str) -> str:
         main()
     else:
         return response
+
+
+
+def convert_to_vector_eps(
+        input_path: str,
+        output_eps_path: str,
+):
+    """
+    1. Vektorisiert ein JPG/PNG zu echten Pfaden.
+    2. Konvertiert die Pfade in ein druckfertiges, professionelles .eps Format.
+    """
+    if not os.path.exists(input_path):
+        print(f"❌ Fehler: '{input_path}' nicht gefunden.")
+        return
+
+    temp_svg_path = "temp_vector.svg"
+
+    try:
+        print(f"⏳ Schritt 1: Analysiere Bild und berechne Vektoren...")
+        vtracer.convert_image_to_svg_py(
+            input_path,
+            temp_svg_path,
+            colormode='color',
+            hierarchical='stacked',
+            mode='spline',
+            filter_speckle=4,
+            color_precision=6
+        )
+
+        print(f"⏳ Schritt 2: Konvertiere Vektoren in professionelles EPS-Format...")
+        # Lade das SVG ein
+        drawing = svg2rlg(temp_svg_path)
+
+        # Schreibe es als echte EPS-Datei auf die Festplatte
+        renderPS.drawToFile(drawing, output_eps_path)
+
+        print(f"✅ FERTIG! Echte Vektor-Datei erstellt: {output_eps_path}")
+
+    except Exception as e:
+        print(f"❌ Fehler bei der Konvertierung: {e}")
+
+    finally:
+        # Räume die temporäre SVG-Datei auf, damit alles sauber bleibt
+        if os.path.exists(temp_svg_path):
+            os.remove(temp_svg_path)
 
 
 # ---------- 3. CLI SETUP ----------

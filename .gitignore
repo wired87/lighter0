@@ -1,7 +1,5 @@
 .env
 .venv
-output
 input
-ollama_implementation.py
-main.py
+
 
