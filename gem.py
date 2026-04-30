@@ -417,7 +417,7 @@ def main():
 
     # len(sys.argv) == 1 bedeutet: Der User hat "python main.py" ohne --parameter getippt
     if len(sys.argv) == 1:
-        gem_api_key = input("❓ GE  MINI_API_KEY (required): ").strip()
+        gem_api_key = input("❓ GEMINI_API_KEY (required): ").strip()
         if gem_api_key is None or len(gem_api_key) == 0:
             gem_api_key = os.getenv("GEM_API_KEY")
         if gem_api_key is None or len(gem_api_key) == 0:
@@ -460,8 +460,18 @@ def main():
         args.typo = ask_user("Welcher Typografie-Stil soll genutzt werden?", args.typo)
         args.colors = ask_user("Wie lautet die Farbpalette?", args.colors)
         args.tags = ask_user("Zusätzliche Freitext-Beschreibung?", args.tags)
-        args.tags = ask_user("In welcher Dir soll das resultet gespeichert werden?", args.output_dir)
+        args.output_dir = ask_user("In welcher Dir soll das resultet gespeichert werden?", args.output_dir)
+
+        args.height = ask_user("Welche Höhe in mm (nur den Zahlen Wert)?", args.height)
+        args.width = ask_user("Welche Breite in mm (nur den Zahlen Wert)?", args.width)
         print("\n" + "=" * 40 + "\n")
+
+    try:
+        args.height = int(args.height)
+        args.width = int(args.width)
+    except Exception as e:
+        raise ValueError(f"Width and height not numerical: {e} \n->restart")
+        main()
 
     # 1. Bilder laden
     images = load_image_source(args.input)
