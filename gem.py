@@ -148,7 +148,21 @@ def generate_cover_image(image_prompt: str, gem_api_key=None):
 
 
 # ---------- 1. DIE NÄCHSTE FUNKTION (Pipeline) ----------
-def run_generation_pipeline(images, theme, bg_texture, math_rule, product_name, typo_style, color_palette, tags, output_dir, args, gem_api_key):
+def run_generation_pipeline(
+        images,
+        theme,
+        bg_texture,
+        math_rule,
+        product_name,
+        typo_style,
+        color_palette,
+        tags,
+        output_dir,
+        args,
+        gem_api_key,
+        height=600,
+        width=600,
+):
     """
     Diese Funktion nimmt alle geöffneten Bilder und Argumente entgegen und
     könnte nun deinen Prompt bauen und an die Google GenAI API schicken.
@@ -197,6 +211,7 @@ def run_generation_pipeline(images, theme, bg_texture, math_rule, product_name, 
     for generated_image in result.generated_images:
         image_bytes = generated_image.image.image_bytes
         image = Image.open(BytesIO(image_bytes))
+        img = img.resize((height or 600, width or 600))  # z.B. 68mm * 69mm bei 10px/mm
 
         image.save(image_save_path)
         print(f"[GENERATE] ✅ Bild erfolgreich gespeichert unter: {image_save_path}")
@@ -260,6 +275,7 @@ def load_image_source(source_path: str):
 
     else:
         print(f"[WARN] Input '{source_path}' nicht gefunden. Gehe ohne Bilder weiter.")
+
 
     return loaded_images
 
@@ -401,9 +417,12 @@ def main():
 
     # len(sys.argv) == 1 bedeutet: Der User hat "python main.py" ohne --parameter getippt
     if len(sys.argv) == 1:
-        gem_api_key = input("❓ GEMINI_API_KEY (required): ").strip()
-
-        # --- 1. OPTIONALER JSON-IMPORT ---
+        gem_api_key = input("❓ GE  MINI_API_KEY (required): ").strip()
+        if gem_api_key is None or len(gem_api_key) == 0:
+            gem_api_key = os.getenv("GEM_API_KEY")
+        if gem_api_key is None or len(gem_api_key) == 0:
+            print("GEM KEY IS NOT ALLOWED TO BE EMPTY -> exit")
+            main()
         json_input = input("❓ Optional: Pfad zu einer cfg.json Datei zum prefill der argumente - kann angepasst werden. (Leer lassen zum Überspringen): ").strip()
 
         # Bereinigt den Pfad (entfernt versehentliche Anführungszeichen beim Copy-Paste und löst "~" auf)
@@ -459,7 +478,9 @@ def main():
         tags=args.tags,
         output_dir=args.output_dir,
         args=args,
-        gem_api_key=gem_api_key
+        gem_api_key=gem_api_key,
+        height=args.height,
+        width=args.width,
     )
 
 
