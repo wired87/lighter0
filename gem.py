@@ -15,6 +15,8 @@ import vtracer
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPS
 
+from conv_3d import process_image
+
 dotenv.load_dotenv()
 
 
@@ -204,14 +206,13 @@ def run_generation_pipeline(
     json_save_path = os.path.join(run_dir, "args.json")
     vec_save_path = os.path.join(run_dir, "vec.eps")
 
-    # 3. Bild generieren
     result = generate_cover_image(prompt, gem_api_key)
 
     # --- SAVE IMAGE ---
     for generated_image in result.generated_images:
         image_bytes = generated_image.image.image_bytes
         image = Image.open(BytesIO(image_bytes))
-        img = img.resize((height or 600, width or 600))  # z.B. 68mm * 69mm bei 10px/mm
+        #image = image.resize((height or 600, width or 600))
 
         image.save(image_save_path)
         print(f"[GENERATE] ✅ Bild erfolgreich gespeichert unter: {image_save_path}")
@@ -229,6 +230,11 @@ def run_generation_pipeline(
             output_eps_path=vec_save_path,
         )
 
+        #
+        process_image(
+            run_dir,
+            image_save_path
+        )
         print(f"[SAVE] ✅ Setup-Parameter gespeichert unter: {json_save_path}")
     except Exception as e:
         print(f"[ERR] ❌ Konnte JSON nicht speichern: {e}")
@@ -411,6 +417,12 @@ def main():
     parser.add_argument("--output_dir",
                         default="output",
                         help="Folder/Dir to save the genrated content to")
+    parser.add_argument("--height",
+                            default="600",
+                            help="Höhe in mm (nur den Zahlen Wert)")
+    parser.add_argument("--width",
+                            default="600",
+                            help="Breite in mm (nur den Zahlen Wert)")
 
     # Liest die Argumente aus der Kommandozeile
     args = parser.parse_args()
@@ -462,8 +474,8 @@ def main():
         args.tags = ask_user("Zusätzliche Freitext-Beschreibung?", args.tags)
         args.output_dir = ask_user("In welcher Dir soll das resultet gespeichert werden?", args.output_dir)
 
-        args.height = ask_user("Welche Höhe in mm (nur den Zahlen Wert)?", args.height)
-        args.width = ask_user("Welche Breite in mm (nur den Zahlen Wert)?", args.width)
+        args.height = ask_user("Höhe in mm (nur den Zahlen Wert):", args.height)
+        args.width = ask_user("Breite in mm (nur den Zahlen Wert):", args.width)
         print("\n" + "=" * 40 + "\n")
 
     try:
