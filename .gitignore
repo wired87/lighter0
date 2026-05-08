@@ -1,5 +1,30 @@
 .env
-.venv
-input
+.venv/
+venv/
+input/
+
+# Python cache/artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Runtime/output artifacts
+output/
+
+# Local/editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Prompt aggregation output (requested ignore)
+prompts.md
 
 
