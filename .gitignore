@@ -1,7 +1,17 @@
 .env
+.env.local
+.env.*.local
 .venv/
 venv/
 input/
+
+# Configuration & Credentials (SENSITIVE - NEVER COMMIT)
+frontend/credentials.json
+frontend/firebase-config.json
+*.pem
+*.key
+*.crt
+.credentials
 
 # Python cache/artifacts
 __pycache__/
@@ -17,6 +27,16 @@ dist/
 
 # Runtime/output artifacts
 output/
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
 # Local/editor files
 .idea/

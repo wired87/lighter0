@@ -12,8 +12,7 @@ from PIL import Image
 
 import os
 import vtracer
-from svglib.svglib import svg2rlg
-from reportlab.graphics import renderPS
+import cairosvg
 
 from conv_3d import process_image
 
@@ -145,6 +144,7 @@ def generate_cover_image(image_prompt: str, gem_api_key=None):
         return result
     except Exception as e:
         print(f"[ERR] Fehler bei der Bildgenerierung: {e}")
+        raise
 
 
 
@@ -239,6 +239,21 @@ def run_generation_pipeline(
     except Exception as e:
         print(f"[ERR] ❌ Konnte JSON nicht speichern: {e}")
 
+    generated_files = []
+    try:
+        for name in sorted(os.listdir(run_dir)):
+            path = os.path.join(run_dir, name)
+            if os.path.isfile(path):
+                generated_files.append(path)
+    except Exception as e:
+        print(f"[WARN] Konnte generierte Dateien nicht auflisten: {e}")
+
+    return {
+        "run_dir": run_dir,
+        "gen_id": str(gen_id),
+        "generated_files": generated_files,
+    }
+
 
 # ---------- 2. BILDER LADEN (Web, Datei, Ordner) ----------
 def load_image_source(source_path: str):
@@ -294,7 +309,7 @@ def print_welcome_screen():
     BOLD = '\033[1m'
 
     # ASCII Art Generator (Schriftart: "Slant")
-    logo = f"""
+    logo = rf"""
 {CYAN}   _____                 __               {MAGENTA}  ___         __ 
 {CYAN}  / ___/___  ____ _____/ /__  ___________{MAGENTA} /   |  _____/ /_
 {CYAN}  \__ \/ _ \/ __ `/ __  / _ \/ ___/ ___/{MAGENTA} / /| | / ___/ __/
@@ -365,11 +380,7 @@ def convert_to_vector_eps(
         )
 
         print(f"⏳ Schritt 2: Konvertiere Vektoren in professionelles EPS-Format...")
-        # Lade das SVG ein
-        drawing = svg2rlg(temp_svg_path)
-
-        # Schreibe es als echte EPS-Datei auf die Festplatte
-        renderPS.drawToFile(drawing, output_eps_path)
+        cairosvg.svg2eps(url=temp_svg_path, write_to=output_eps_path)
 
         print(f"✅ FERTIG! Echte Vektor-Datei erstellt: {output_eps_path}")
 

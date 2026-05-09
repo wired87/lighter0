@@ -9,9 +9,13 @@ import svgwrite
 import json
 import xml.etree.ElementTree as ET
 import re
-import cv2
 
-HAS_CV = True
+try:
+    import cv2
+    HAS_CV = True
+except Exception:
+    cv2 = None
+    HAS_CV = False
 
 
 def log(stage, t0):
@@ -421,9 +425,13 @@ def process_image(
     # -------------------------
     t0 = time.time()
 
+    step = max(1, target_res // 2048)
+    img_svg = arr_hr[::step, ::step].astype(np.uint8)
+    h_svg, w_svg = img_svg.shape
+    dwg = svgwrite.Drawing(out_svg, size=(f"{w_svg}px", f"{h_svg}px"))
+    dwg.attribs['shape-rendering'] = 'crispEdges'
+
     if HAS_CV:
-        step = max(1, target_res // 2048)
-        img_svg = arr_hr[::step, ::step].astype(np.uint8)
 
         # EDGE BASED (nicht threshold!)
         edges = cv2.Canny(img_svg, 80, 160)
@@ -434,10 +442,6 @@ def process_image(
             cv2.RETR_LIST,  # ← wichtig!
             cv2.CHAIN_APPROX_SIMPLE
         )
-
-        h_svg, w_svg = img_svg.shape
-        dwg = svgwrite.Drawing(out_svg, size=(f"{w_svg}px", f"{h_svg}px"))
-        dwg.attribs['shape-rendering'] = 'crispEdges'
 
         kept = 0
 
@@ -460,7 +464,16 @@ def process_image(
         print(f"[SVG] contours_kept={kept}")
 
     else:
-        print("[SVG] fallback skipped (no cv2)")
+        # Fallback: threshold pixels to preserve SVG output without OpenCV.
+        ys_fg, xs_fg = np.where(img_svg > black_threshold)
+        kept = 0
+        skip = max(1, len(xs_fg) // 8000) if len(xs_fg) else 1
+        for i in range(0, len(xs_fg), skip):
+            x = int(xs_fg[i])
+            y = int(ys_fg[i])
+            dwg.add(dwg.rect(insert=(x, y), size=(1, 1), fill="white", opacity=0.9))
+            kept += 1
+        print(f"[SVG] fallback threshold points={kept} (no cv2)")
 
     dwg.save()
     log("SVG", t0)
@@ -510,100 +523,4 @@ if __name__ == "__main__":
         out_dir=os.path.join("output", "test"),
         path="output/ce5c9acd-55bb-4d65-9f0f-7a58eee033d5/img.jpg")
     print(res)
-
-
-
-
-"""
-
-
-def generate_animated_svg(arr, black_threshold=40, out="animated.svg"):
-
-
-    t0 = time.time()
-
-    h, w = arr.shape
-    cx, cy = w // 2, h // 2
-
-    xs = np.arange(w)
-    ys = np.arange(h)
-    X, Y = np.meshgrid(xs, ys)
-
-    # distance layers
-    dist = np.maximum(np.abs(X - cx), np.abs(Y - cy))
-    max_d = int(dist.max())
-
-    dwg = svgwrite.Drawing(out, size=(f"{w}px", f"{h}px"))
-    dwg.attribs['shape-rendering'] = 'crispEdges'
-
-    # optional: reduce frames (huge speedup)
-    step = max(1, max_d // 120)   # ~120 frames max
-
-    total_shapes = 0
-
-    for t in range(0, max_d + 1, step):
-        group = dwg.g(id=f"layer_{t}", visibility="hidden")
-
-        # mask for this layer
-        mask = (dist == t)
-
-        ys_t, xs_t = np.where(mask)
-
-        if len(xs_t) == 0:
-            continue
-
-        # 🔥 convert once (fix crash)
-        xs_t = xs_t.astype(int)
-        ys_t = ys_t.astype(int)
-
-        # filter visible pixels only
-        vals = arr[ys_t, xs_t]
-        valid = vals > black_threshold
-
-        xs_t = xs_t[valid]
-        ys_t = ys_t[valid]
-        vals = vals[valid].astype(float)
-
-        if len(xs_t) == 0:
-            continue
-
-        # -------------------------
-        # FAST DRAW (reduced density)
-        # -------------------------
-        # skip pixels for speed (important!)
-        skip = max(1, len(xs_t) // 5000)
-
-        for i in range(0, len(xs_t), skip):
-            x = int(xs_t[i])
-            y = int(ys_t[i])
-            v = vals[i]
-
-            group.add(dwg.rect(
-                insert=(x, y),
-                size=(1, 1),
-                fill="white",
-                opacity=v / 255.0
-            ))
-
-        total_shapes += len(xs_t) // skip
-
-        # animation
-        group.add(dwg.animate(
-            attributeName="visibility",
-            values="hidden;visible",
-            dur="0.08s",
-            begin=f"{t * 0.02}s",
-            fill="freeze"
-        ))
-
-        dwg.add(group)
-
-    dwg.save()
-
-    print(f"[ANIM_SVG] done in {time.time()-t0:.2f}s")
-    print(f"[ANIM_SVG] shapes ~ {total_shapes}")
-
-
-
-"""
 

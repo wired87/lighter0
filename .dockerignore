@@ -3,10 +3,17 @@
 .idea
 .vscode
 
+# Credentials & Secrets (NEVER INCLUDE IN DOCKER IMAGE)
 .env
 .env.*
 .venv
 venv
+frontend/credentials.json
+frontend/firebase-config.json
+*.pem
+*.key
+*.crt
+.credentials
 
 __pycache__
 *.pyc
@@ -23,3 +30,4 @@ prompts.md
 !README.md
 
 *.spec
+.DS_Store
