@@ -5,9 +5,22 @@ Serves HTML templates with React-based UI for cover art generation and payment p
 """
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+import json
 import os
+
+
+ADMIN_CONTACT_NAME = (os.getenv("ADMIN_CONTACT_NAME") or "Benedikt Sterra").strip()
+ADMIN_CONTACT_EMAIL = (os.getenv("ADMIN_EMAIL") or "office@botworld.cloud").strip()
+
+
+def _runtime_config_script() -> str:
+    config = {
+        "adminContactName": ADMIN_CONTACT_NAME,
+        "adminContactEmail": ADMIN_CONTACT_EMAIL,
+    }
+    return f'<script>window.LIGHTER0_RUNTIME_CONFIG = {json.dumps(config)};</script>'
 
 
 HTML_TEMPLATE = """
@@ -22,9 +35,9 @@ HTML_TEMPLATE = """
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="/static/firebase-config.js"></script>
     <script src="/static/google_aut.js"></script>
+    <script src="/static/privacy_policy.js"></script>
     <style>
         :root {
             --bg-0: #f6f8fc;
@@ -638,6 +651,51 @@ HTML_TEMPLATE = """
             line-height: 1.4;
         }
 
+        .history-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .history-folder {
+            border: 1px solid #3f4a60;
+            border-radius: 8px;
+            background: #242a39;
+            color: #dbe6ff;
+            padding: 10px;
+            text-align: left;
+            cursor: pointer;
+            transition: border-color .2s ease, box-shadow .2s ease, transform .15s ease;
+        }
+
+        .history-folder:hover {
+            transform: translateY(-1px);
+            border-color: #7f9cff;
+            box-shadow: 0 8px 14px rgba(32, 44, 74, 0.32);
+        }
+
+        .history-folder.selected {
+            border-color: #90a7ff;
+            box-shadow: 0 0 0 2px rgba(144, 167, 255, 0.30);
+            background: linear-gradient(180deg, #2b3350, #262d43);
+        }
+
+        .history-folder-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #eef4ff;
+            word-break: break-word;
+            line-height: 1.2;
+            margin-bottom: 6px;
+        }
+
+        .history-folder-meta {
+            font-size: 0.74rem;
+            color: #b8c6e2;
+            line-height: 1.25;
+        }
+
         .toast-wrap {
             position: fixed;
             right: 22px;
@@ -732,946 +790,8 @@ HTML_TEMPLATE = """
 <body>
     <div id="root"></div>
     
-    <script type="text/babel">
-        const { useState, useEffect } = React;
-        const API_BASE = window.location.port === '3000' ? 'http://localhost:8000' : '';
-
-        // localStorage helpers for persistent authentication state
-        const LOCAL_STORAGE_USER_KEY = 'lighter0_authenticated_user';
-        
-        function saveAuthenticatedUserToStorage(user) {
-            if (!user) {
-                localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
-            } else {
-                localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(user));
-            }
-        }
-        
-        function loadAuthenticatedUserFromStorage() {
-            try {
-                const stored = localStorage.getItem(LOCAL_STORAGE_USER_KEY);
-                return stored ? JSON.parse(stored) : null;
-            } catch (error) {
-                console.warn('Failed to load user from storage:', error);
-                return null;
-            }
-        }
-
-        // Helper function to get file type information
-        function getFileTypeInfo(fileName) {
-            const ext = (fileName.split('.').pop() || 'file').toLowerCase();
-            const typeMap = {
-                'png': { emoji: '🖼️', label: 'PNG Image', category: 'image' },
-                'jpg': { emoji: '🖼️', label: 'JPG Image', category: 'image' },
-                'jpeg': { emoji: '🖼️', label: 'JPEG Image', category: 'image' },
-                'svg': { emoji: '✨', label: 'SVG Vector', category: 'vector' },
-                'gif': { emoji: '🎬', label: 'GIF Animation', category: 'image' },
-                'webp': { emoji: '🖼️', label: 'WebP Image', category: 'image' },
-                'pdf': { emoji: '📄', label: 'PDF Document', category: 'document' },
-                'json': { emoji: '📋', label: 'JSON Data', category: 'data' },
-                'html': { emoji: '🌐', label: 'HTML Document', category: 'web' },
-                'zip': { emoji: '📦', label: 'ZIP Archive', category: 'archive' },
-                'txt': { emoji: '📝', label: 'Text File', category: 'document' }
-            };
-            return typeMap[ext] || { emoji: '📁', label: fileName, category: 'file' };
-        }
-
-        // Helper function to get file extension
-        function getFileExtension(fileName) {
-            return (fileName.split('.').pop() || 'file').toUpperCase();
-        }
-
-        function UserInfoCard({ authenticatedUser, authStatus, userProfile, activity, loadingProfile, onRefreshProfile, onSignOut }) {
-            const email = (authenticatedUser && authenticatedUser.email) || (userProfile && userProfile.email) || 'Unavailable';
-            const uid = (authenticatedUser && authenticatedUser.uid) || (userProfile && userProfile.uid) || 'Unavailable';
-
-            return (
-                <div className="auth-card">
-                    <label>User Information</label>
-                    <div className="user-card-grid">
-                        <div className="user-card-meta">
-                            <div><strong>Email:</strong> {email}</div>
-                            <div><strong>UID:</strong> {uid}</div>
-                            <div><strong>Current Credits:</strong> {(userProfile && userProfile.credits) || 0}</div>
-                            <div><strong>Pending Credits:</strong> {(userProfile && userProfile.pending_credits) || 0}</div>
-                            <div><strong>Paid Purchases:</strong> {(userProfile && userProfile.paid_purchases) || 0}</div>
-                            <div><strong>Generations:</strong> {activity.generations}</div>
-                            <div className="help-text">{activity.lastAction}</div>
-                            <div className="help-text">{authStatus}</div>
-                        </div>
-                        <div className="user-card-actions">
-                            <button type="button" className="btn-secondary" onClick={onRefreshProfile} disabled={loadingProfile}>
-                                {loadingProfile ? 'Refreshing...' : 'Refresh Data'}
-                            </button>
-                            <button type="button" className="btn-secondary" onClick={onSignOut}>
-                                Log Out
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        function App() {
-            const [authStatus, setAuthStatus] = useState('Not authenticated');
-            const [activeTab, setActiveTab] = useState('generator');
-            const [authenticatedUser, setAuthenticatedUser] = useState(loadAuthenticatedUserFromStorage());
-            const [userProfile, setUserProfile] = useState(null);
-            const [loadingProfile, setLoadingProfile] = useState(false);
-            const [freeGenerationStatus, setFreeGenerationStatus] = useState(null);
-            const [toast, setToast] = useState(null);
-            const [activity, setActivity] = useState({
-                generations: 0,
-                lastAction: 'No actions yet.'
-            });
-
-            const refreshFreeGenerationStatus = async (userArg) => {
-                const user = userArg || authenticatedUser;
-                if (!user) {
-                    setFreeGenerationStatus(null);
-                    return;
-                }
-
-                const email = (user.email || '').trim();
-                const uid = (user.uid || '').trim();
-                if (!email && !uid) {
-                    return;
-                }
-
-                try {
-                    const query = new URLSearchParams();
-                    if (email) query.set('email', email);
-                    if (uid) query.set('uid', uid);
-                    const response = await fetch(`${API_BASE}/api/free-generation-status?${query.toString()}`);
-                    if (!response.ok) {
-                        throw new Error('Failed to load free generation status');
-                    }
-                    const payload = await response.json();
-                    if (payload && payload.success) {
-                        setFreeGenerationStatus({
-                            can_use_free: payload.can_use_free,
-                            free_generations_used: payload.free_generations_used
-                        });
-                    }
-                } catch (error) {
-                    console.log('Free generation status check failed:', error.message);
-                }
-            };
-
-            const refreshUserProfile = async (userArg) => {
-                const user = userArg || authenticatedUser;
-                if (!user) {
-                    setUserProfile(null);
-                    return;
-                }
-
-                const email = (user.email || '').trim();
-                const uid = (user.uid || '').trim();
-                if (!email && !uid) {
-                    return;
-                }
-
-                setLoadingProfile(true);
-                try {
-                    const query = new URLSearchParams();
-                    if (email) query.set('email', email);
-                    if (uid) query.set('uid', uid);
-                    const response = await fetch(`${API_BASE}/api/user-profile?${query.toString()}`);
-                    if (!response.ok) {
-                        throw new Error('Failed to load user profile');
-                    }
-                    const payload = await response.json();
-                    if (payload && payload.user) {
-                        setUserProfile(payload.user);
-                    }
-                } catch (error) {
-                    setAuthStatus('Profile refresh failed: ' + error.message);
-                } finally {
-                    setLoadingProfile(false);
-                }
-            };
-
-            const recordAction = (actionLabel) => {
-                setActivity((prev) => ({
-                    generations: actionLabel === 'generation_success' ? prev.generations + 1 : prev.generations,
-                    lastAction: `Last action: ${actionLabel} at ${new Date().toLocaleTimeString()}`,
-                }));
-                refreshUserProfile();
-            };
-
-            const startGoogleAuth = async () => {
-                if (!window.firebaseConfig || !window.firebaseConfig.projectId) {
-                    setAuthStatus('Firebase is not configured.');
-                    return;
-                }
-
-                if (!window.GoogleAuth) {
-                    setAuthStatus('Google auth module is not loaded.');
-                    return;
-                }
-
-                try {
-                    setAuthStatus('Initializing Firebase authentication...');
-                    await window.GoogleAuth.initializeGoogleAuth({
-                        endpoint: `${API_BASE}/api/auth-user`,
-                        onAuthSuccess: function (user) {
-                            const authUser = user || null;
-                            saveAuthenticatedUserToStorage(authUser);
-                            setAuthenticatedUser(authUser);
-                            refreshUserProfile(authUser);
-                            if (authUser && authUser.email) {
-                                setAuthStatus('Authenticated as ' + authUser.email);
-                            } else {
-                                setAuthStatus('Authentication successful.');
-                            }
-                        },
-                        onAuthError: function (error) {
-                            saveAuthenticatedUserToStorage(null);
-                            setAuthenticatedUser(null);
-                            setUserProfile(null);
-                            setAuthStatus('Authentication error: ' + error.message);
-                        }
-                    });
-                    setAuthStatus('Opening sign-in dialog...');
-                    await window.GoogleAuth.signInWithGoogle();
-                } catch (error) {
-                    setAuthStatus('Failed: ' + error.message);
-                }
-            };
-
-            const handleLogout = async () => {
-                try {
-                    if (window.GoogleAuth && window.GoogleAuth.signOut) {
-                        await window.GoogleAuth.signOut();
-                    }
-                } catch (error) {
-                    setAuthStatus('Logout warning: ' + error.message);
-                } finally {
-                    saveAuthenticatedUserToStorage(null);
-                    setAuthenticatedUser(null);
-                    setUserProfile(null);
-                    setActivity({ generations: 0, lastAction: 'No actions yet.' });
-                    setAuthStatus('Not authenticated');
-                }
-            };
-
-            useEffect(() => {
-                if (authenticatedUser) {
-                    refreshUserProfile(authenticatedUser);
-                    refreshFreeGenerationStatus(authenticatedUser);
-                }
-            }, [authenticatedUser]);
-
-            useEffect(() => {
-                const params = new URLSearchParams(window.location.search || '');
-                const checkout = (params.get('checkout') || '').trim().toLowerCase();
-                if (checkout !== 'success' && checkout !== 'cancel') {
-                    return;
-                }
-
-                if (checkout === 'success') {
-                    setToast({
-                        type: 'success',
-                        title: 'Payment successful',
-                        message: 'Credits purchase completed. Your profile will refresh shortly.'
-                    });
-                } else {
-                    setToast({
-                        type: 'error',
-                        title: 'Payment canceled',
-                        message: 'Checkout was canceled. No charge was made.'
-                    });
-                }
-
-                params.delete('checkout');
-                const nextQuery = params.toString();
-                const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash || ''}`;
-                window.history.replaceState({}, '', nextUrl);
-
-                const timer = window.setTimeout(() => {
-                    setToast(null);
-                    refreshUserProfile();
-                }, 5000);
-
-                return () => window.clearTimeout(timer);
-            }, []);
-
-            return (
-                <div className="container app-shell">
-                    <header>
-                        <h1>✨ lighter0</h1>
-                        <p>Seamless Cover Art Generator & Payments</p>
-                    </header>
-
-                    {authenticatedUser ? (
-                        <UserInfoCard
-                            authenticatedUser={authenticatedUser}
-                            authStatus={authStatus}
-                            userProfile={userProfile}
-                            activity={activity}
-                            loadingProfile={loadingProfile}
-                            onRefreshProfile={() => refreshUserProfile()}
-                            onSignOut={handleLogout}
-                        />
-                    ) : (
-                        <div className="auth-card">
-                            <label>Google Authentication with Firebase</label>
-                            <div className="auth-row">
-                                <button type="button" className="btn-primary" onClick={startGoogleAuth}>
-                                    🔐 Sign in with Google
-                                </button>
-                            </div>
-                            <div className="auth-status">{authStatus}</div>
-                        </div>
-                    )}
-
-                    <div className="tabs">
-                        <button 
-                            className={`tab-button ${activeTab === 'generator' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('generator')}
-                        >
-                            🎨 Cover Art Generator
-                        </button>
-                        <button 
-                            className={`tab-button ${activeTab === 'payment' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('payment')}
-                        >
-                            💳 Buy Credits
-                        </button>
-                    </div>
-
-                    <div className="main-content">
-                        {activeTab === 'generator' && <CoverArtGenerator authenticatedUser={authenticatedUser} freeGenerationStatus={freeGenerationStatus} onAction={recordAction} />}
-                        {activeTab === 'payment' && <PaymentSection authenticatedUser={authenticatedUser} onAction={recordAction} />}
-                    </div>
-
-                    {toast && (
-                        <div className="toast-wrap" aria-live="polite" aria-atomic="true">
-                            <div className={`toast-card ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
-                                <strong>{toast.title}</strong>
-                                <p>{toast.message}</p>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        function CoverArtGenerator({ authenticatedUser, freeGenerationStatus, onAction }) {
-            const [formData, setFormData] = useState({
-                theme: 'Mathematical and physical futuristic',
-                bg_texture: 'sharp',
-                math: 'golden ratio proportions',
-                name: '',
-                typo: 'futuristic',
-                colors: 'black and white',
-                tags: 'A colorful luxury cyberpunk lighter-cover with glowing orange neon elements and elegant typography.',
-                height: 600,
-                width: 600,
-                pasted_images: [],
-                use_free: freeGenerationStatus && freeGenerationStatus.can_use_free
-            });
-            
-            const [status, setStatus] = useState({ type: null, message: '' });
-            const [resultData, setResultData] = useState(null);
-            const [loading, setLoading] = useState(false);
-            const [selectedInputArtifactPath, setSelectedInputArtifactPath] = useState('');
-
-            useEffect(() => {
-                setFormData(prev => ({
-                    ...prev,
-                    use_free: !!(freeGenerationStatus && freeGenerationStatus.can_use_free)
-                }));
-            }, [freeGenerationStatus && freeGenerationStatus.can_use_free]);
-            
-            const handleChange = (e) => {
-                const { name, value } = e.target;
-                setFormData(prev => ({
-                    ...prev,
-                    [name]: name === 'height' || name === 'width' ? parseInt(value) : value
-                }));
-            };
-
-            const fileToDataUrl = (file) => new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(String(reader.result || ''));
-                reader.onerror = () => reject(new Error('Failed to read image file'));
-                reader.readAsDataURL(file);
-            });
-
-            const appendImagesToFormData = (files) => {
-                const valid = Array.from(files || []).filter(f => f && String(f.type || '').startsWith('image/'));
-                if (valid.length === 0) {
-                    return;
-                }
-
-                Promise.all(valid.map(async (file, index) => ({
-                    name: file.name || `pasted_${Date.now()}_${index + 1}.png`,
-                    data_url: await fileToDataUrl(file),
-                })))
-                    .then((items) => {
-                        setFormData(prev => ({
-                            ...prev,
-                            pasted_images: [...(prev.pasted_images || []), ...items],
-                        }));
-                    })
-                    .catch((error) => {
-                        setStatus({ type: 'error', message: `❌ Error while reading pasted image: ${error.message}` });
-                    });
-            };
-
-            const handlePasteImages = (e) => {
-                const items = Array.from((e.clipboardData && e.clipboardData.items) || []);
-                const imageFiles = items
-                    .map(item => item.getAsFile && item.getAsFile())
-                    .filter(file => file && String(file.type || '').startsWith('image/'));
-
-                if (imageFiles.length === 0) {
-                    return;
-                }
-
-                e.preventDefault();
-                appendImagesToFormData(imageFiles);
-            };
-
-            const handleFileInput = (e) => {
-                appendImagesToFormData(e.target.files || []);
-                e.target.value = '';
-            };
-
-            const clearPastedImages = () => {
-                setFormData(prev => ({ ...prev, pasted_images: [] }));
-            };
-            
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-
-                setLoading(true);
-                setResultData(null);
-                setStatus({ type: 'loading', message: 'Generating cover art...' });
-                
-                try {
-                    const payload = {
-                        ...formData,
-                        user_id: (authenticatedUser && authenticatedUser.uid) ? authenticatedUser.uid : undefined,
-                        user_email: (authenticatedUser && authenticatedUser.email) ? authenticatedUser.email : undefined,
-                        use_free: formData.use_free || false
-                    };
-                    const response = await fetch(`${API_BASE}/api/process`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(payload)
-                    });
-                    
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.detail || 'Generation failed');
-                    }
-                    
-                    const result = await response.json();
-                    if (!result || result.success === false) {
-                        throw new Error(result && (result.error || result.message) ? (result.error || result.message) : 'Generation failed');
-                    }
-                    setResultData(result);
-                    const firstInputArtifact = (result.input_artifacts || [])[0];
-                    setSelectedInputArtifactPath(firstInputArtifact ? firstInputArtifact.relative_path : '');
-                    setStatus({
-                        type: 'success',
-                        message: '✅ Cover art generated successfully!'
-                    });
-                    if (onAction) {
-                        onAction('generation_success');
-                    }
-                } catch (error) {
-                    setStatus({
-                        type: 'error',
-                        message: `❌ Error: ${error.message}`
-                    });
-                } finally {
-                    setLoading(false);
-                }
-            };
-            
-            return (
-                <div className="generator-layout">
-                    <div className="card">
-                        <h2>Generate Cover Art</h2>
-                        <form onSubmit={handleSubmit}>
-                            {status.type && (
-                                <div className={`status-message status-${status.type}`}>
-                                    {status.type === 'loading' && <span className="loader"></span>}
-                                    {' '}{status.message}
-                                </div>
-                            )}
-
-                            <div className="form-group">
-                                <label>Image File</label>
-                                <div className="help-text">No path or URL is required. Upload/paste is optional.</div>
-                            </div>
-
-                            <div className="form-group paste-zone">
-                                <label htmlFor="paste_images">Paste Images Into Temp Store (Optional)</label>
-                                <textarea
-                                    id="paste_images"
-                                    onPaste={handlePasteImages}
-                                    placeholder="Paste image(s) here with Ctrl/Cmd+V. Pasted images are saved in a temp_store on the server and override default input/output for this run."
-                                />
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    onChange={handleFileInput}
-                                    style={{ marginTop: '10px' }}
-                                />
-                                <div className="help-text">
-                                    {formData.pasted_images.length > 0
-                                        ? `${formData.pasted_images.length} pasted image(s) queued for upload`
-                                        : 'No image files queued yet.'}
-                                </div>
-                                {formData.pasted_images.length > 0 && (
-                                    <button type="button" className="btn-secondary" style={{ marginTop: '10px' }} onClick={clearPastedImages}>
-                                        Clear Pasted Images
-                                    </button>
-                                )}
-                            </div>
-                            
-                            <div className="form-group">
-                                <label htmlFor="theme">Theme</label>
-                                <input
-                                    type="text"
-                                    name="theme"
-                                    id="theme"
-                                    value={formData.theme}
-                                    onChange={handleChange}
-                                    placeholder="e.g., Mathematical and physical futuristic"
-                                />
-                            </div>
-                            
-                            <div className="form-group">
-                                <label htmlFor="bg_texture">Background Texture</label>
-                                <input
-                                    type="text"
-                                    name="bg_texture"
-                                    id="bg_texture"
-                                    value={formData.bg_texture}
-                                    onChange={handleChange}
-                                    placeholder="e.g., sharp, matte, metallic"
-                                />
-                            </div>
-                            
-                            <div className="form-group">
-                                <label htmlFor="math">Mathematical Rule</label>
-                                <input
-                                    type="text"
-                                    name="math"
-                                    id="math"
-                                    value={formData.math}
-                                    onChange={handleChange}
-                                    placeholder="e.g., golden ratio proportions"
-                                />
-                            </div>
-                            
-                            <div className="form-group">
-                                <label htmlFor="name">Product Name</label>
-                                <input
-                                    type="text"
-                                    name="name"
-                                    id="name"
-                                    value={formData.name}
-                                    onChange={handleChange}
-                                    placeholder="Leave empty for no text"
-                                />
-                            </div>
-                            
-                            <div className="form-group">
-                                <label htmlFor="typo">Typography Style</label>
-                                <input
-                                    type="text"
-                                    name="typo"
-                                    id="typo"
-                                    value={formData.typo}
-                                    onChange={handleChange}
-                                    placeholder="e.g., futuristic, bold, elegant"
-                                />
-                            </div>
-                            
-                            <div className="form-group">
-                                <label htmlFor="colors">Color Palette</label>
-                                <input
-                                    type="text"
-                                    name="colors"
-                                    id="colors"
-                                    value={formData.colors}
-                                    onChange={handleChange}
-                                    placeholder="e.g., black and white, neon orange"
-                                />
-                            </div>
-                            
-                            <div className="form-group">
-                                <label htmlFor="tags">Additional Tags</label>
-                                <textarea
-                                    name="tags"
-                                    id="tags"
-                                    value={formData.tags}
-                                    onChange={handleChange}
-                                    placeholder="Describe additional design elements..."
-                                />
-                            </div>
-                            
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label htmlFor="height">Height (pixels)</label>
-                                    <input
-                                        type="number"
-                                        name="height"
-                                        id="height"
-                                        value={formData.height}
-                                        onChange={handleChange}
-                                        min="100"
-                                        max="2000"
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label htmlFor="width">Width (pixels)</label>
-                                    <input
-                                        type="number"
-                                        name="width"
-                                        id="width"
-                                        value={formData.width}
-                                        onChange={handleChange}
-                                        min="100"
-                                        max="2000"
-                                    />
-                                </div>
-                            </div>
-                            
-                            <div className="button-group">
-                                <button type="submit" className="btn-primary" disabled={loading}>
-                                    {loading ? (
-                                        <>
-                                            <span className="loader"></span> Generating...
-                                        </>
-                                    ) : (
-                                        '🚀 Generate Cover Art'
-                                    )}
-                                </button>
-                                <button 
-                                    type="button" 
-                                    className="btn-secondary"
-                                    onClick={() => {
-                                        setFormData({
-                                            theme: 'Mathematical and physical futuristic',
-                                            bg_texture: 'sharp',
-                                            math: 'golden ratio proportions',
-                                            name: '',
-                                            typo: 'futuristic',
-                                            colors: 'black and white',
-                                            tags: 'A colorful luxury cyberpunk lighter-cover with glowing orange neon elements and elegant typography.',
-                                            height: 600,
-                                            width: 600,
-                                            pasted_images: [],
-                                            use_free: freeGenerationStatus && freeGenerationStatus.can_use_free
-                                        });
-                                        setStatus({ type: null, message: '' });
-                                        setResultData(null);
-                                        setSelectedInputArtifactPath('');
-                                    }}
-                                >
-                                    Reset
-                                </button>
-                            </div>
-                            
-                            {authenticatedUser && (
-                                <div className="help-text" style={{ marginTop: '12px', textAlign: 'center', fontWeight: 600, color: freeGenerationStatus && freeGenerationStatus.can_use_free ? 'var(--ok-fg)' : 'var(--text-2)' }}>
-                                    {freeGenerationStatus ? (
-                                        freeGenerationStatus.can_use_free ? (
-                                            '✨ Free try available: 0/1 used today'
-                                        ) : (
-                                            '⭐ Daily free try used: 1/1 used today'
-                                        )
-                                    ) : (
-                                        'Loading free tries...'
-                                    )}
-                                </div>
-                            )}
-                        </form>
-                    </div>
-
-                    <div className="artifacts-panel">
-                        {loading ? (
-                            <div className="artifacts-loading" aria-live="polite" aria-busy="true">
-                                <span className="loader" aria-hidden="true"></span>
-                                <div className="artifacts-loading-title">Creating media...</div>
-                                <div className="artifacts-loading-sub">Your files are being generated. Results will appear here automatically.</div>
-                            </div>
-                        ) : resultData ? (
-                            <>
-                                <h3>Temp Store + Generated Files</h3>
-
-                                {resultData.input_artifacts && resultData.input_artifacts.length > 0 && (
-                                    <>
-                                        <div className="help-text" style={{ color: '#cdd8ea', marginBottom: '8px' }}>
-                                            Temp-store images (select to preview large)
-                                        </div>
-                                        <div className="temp-thumb-grid">
-                                            {resultData.input_artifacts.map((file) => {
-                                                const src = `${API_BASE}${file.view_url}`;
-                                                const isSelected = selectedInputArtifactPath === file.relative_path;
-                                                return (
-                                                    <button
-                                                        key={file.relative_path}
-                                                        type="button"
-                                                        className={`temp-thumb-card ${isSelected ? 'selected' : ''}`}
-                                                        onClick={() => setSelectedInputArtifactPath(file.relative_path)}
-                                                    >
-                                                        <img src={src} alt={file.name || 'temp image'} />
-                                                        <div className="temp-thumb-name">{file.name || file.relative_path}</div>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </>
-                                )}
-
-                                {(() => {
-                                    const selected = (resultData.input_artifacts || []).find(
-                                        (item) => item.relative_path === selectedInputArtifactPath
-                                    );
-                                    const firstGeneratedImage = (resultData.artifacts || []).find((item) =>
-                                        String(item.mime_type || '').startsWith('image/')
-                                    );
-                                    if (!selected && !resultData.preview_image_data_url && !firstGeneratedImage) {
-                                        return null;
-                                    }
-
-                                    return (
-                                        <div className="large-preview-wrap">
-                                            <img
-                                                src={selected
-                                                    ? `${API_BASE}${selected.view_url}`
-                                                    : (resultData.preview_image_data_url || `${API_BASE}${firstGeneratedImage.view_url}`)}
-                                                alt="Selected preview"
-                                            />
-                                            <div className="large-preview-label">
-                                                {selected ? selected.name : (firstGeneratedImage ? firstGeneratedImage.name : 'Generated preview')}
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-
-                                {resultData.artifacts && resultData.artifacts.length > 0 && (
-                                    <>
-                                        <div className="help-text" style={{ color: '#cdd8ea', marginBottom: '8px' }}>
-                                            Generated files
-                                        </div>
-                                        <div className="artifact-list">
-                                            {resultData.artifacts.map((file) => {
-                                                const fileName = file.name || file.relative_path || 'Unknown';
-                                                const fileSize = Math.round((file.size_bytes || 0) / 1024);
-                                                const fileType = getFileTypeInfo(fileName);
-                                                return (
-                                                    <div key={file.relative_path} className="artifact-item">
-                                                        <div className="file-name" title={fileName}>
-                                                            {fileType.emoji} {fileType.label}
-                                                        </div>
-                                                        <div className="file-size">{fileSize} KB • {getFileExtension(fileName)}</div>
-                                                        <div className="file-actions">
-                                                            <a href={`${API_BASE}${file.view_url}`} target="_blank" rel="noreferrer">👁️ View</a>
-                                                            <a href={`${API_BASE}${file.download_url}`} target="_blank" rel="noreferrer" download>📥 Download</a>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </>
-                                )}
-
-                                {(!resultData.artifacts || resultData.artifacts.length === 0) &&
-                                 (!resultData.input_artifacts || resultData.input_artifacts.length === 0) && (
-                                    <div className="artifacts-empty" style={{ padding: '20px 0 0', color: '#b9c7e3' }}>
-                                        <p>No renderable output files were returned for this run.</p>
-                                    </div>
-                                )}
-                            </>
-                        ) : (
-                            <div className="artifacts-empty">
-                                <p>📂 Temp-store files and generated files will appear here</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-        }
-        
-        function PaymentSection({ authenticatedUser, onAction }) {
-            const [selectedTier, setSelectedTier] = useState('starter');
-            const [status, setStatus] = useState({ type: null, message: '' });
-            const [loading, setLoading] = useState(false);
-            const [tiers, setTiers] = useState([]);
-            const [catalog, setCatalog] = useState(null);
-            const [loadingTiers, setLoadingTiers] = useState(true);
-            const customerEmail = (authenticatedUser && authenticatedUser.email) ? authenticatedUser.email : '';
-
-            useEffect(() => {
-                let active = true;
-
-                const loadPaymentCatalog = async () => {
-                    setLoadingTiers(true);
-                    try {
-                        const response = await fetch(`${API_BASE}/api/tiers`);
-                        if (!response.ok) {
-                            const text = await response.text();
-                            throw new Error(text || 'Failed to load payment tiers');
-                        }
-
-                        const payload = await response.json();
-                        const tierItems = Array.isArray(payload.tiers) ? payload.tiers : [];
-                        if (!active) return;
-
-                        setCatalog(payload.catalog || null);
-                        setTiers(tierItems);
-                        if (tierItems.length > 0) {
-                            const starter = tierItems.find(item => (item.tier || '').toLowerCase() === 'starter');
-                            setSelectedTier((starter && starter.tier) ? starter.tier : (tierItems[0].tier || 'starter'));
-                        }
-                    } catch (error) {
-                        if (!active) return;
-                        setStatus({ type: 'error', message: `❌ Pricing unavailable: ${error.message}` });
-                    } finally {
-                        if (active) {
-                            setLoadingTiers(false);
-                        }
-                    }
-                };
-
-                loadPaymentCatalog();
-                return () => {
-                    active = false;
-                };
-            }, []);
-            
-            const handlePayment = async (e) => {
-                e.preventDefault();
-                
-                if (!customerEmail.trim()) {
-                    setStatus({ type: 'error', message: 'Please sign in with Google before purchasing credits' });
-                    return;
-                }
-
-                if (!tiers.some(item => item.tier === selectedTier)) {
-                    setStatus({ type: 'error', message: 'Please select a valid payment tier' });
-                    return;
-                }
-                
-                setLoading(true);
-                setStatus({ type: 'loading', message: 'Redirecting to payment...' });
-                
-                try {
-                    const response = await fetch(`${API_BASE}/api/checkout`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            tier: selectedTier,
-                            customer_email: customerEmail,
-                            user_id: (authenticatedUser && authenticatedUser.uid) ? authenticatedUser.uid : undefined
-                        })
-                    });
-                    
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.detail || 'Payment setup failed');
-                    }
-                    
-                    const result = await response.json();
-                    if (onAction) {
-                        onAction('checkout_started');
-                    }
-                    // Open Stripe checkout in new tab (_blank) and keep current session
-                    window.open(result.checkout_url, '_blank');
-                } catch (error) {
-                    setStatus({
-                        type: 'error',
-                        message: `❌ Error: ${error.message}`
-                    });
-                    setLoading(false);
-                }
-            };
-            
-            return (
-                <>
-                    <div className="card">
-                        <h2>Purchase Credits</h2>
-                        <form onSubmit={handlePayment}>
-                            {status.type && (
-                                <div className={`status-message status-${status.type}`}>
-                                    {status.type === 'loading' && <span className="loader"></span>}
-                                    {' '}{status.message}
-                                </div>
-                            )}
-                            
-                            <div className="form-group">
-                                <label>Select Package</label>
-                                <div className="tier-selector">
-                                    {tiers.map(tier => (
-                                        <div
-                                            key={tier.tier}
-                                            className={`tier-card ${selectedTier === tier.tier ? 'selected' : ''}`}
-                                            onClick={() => setSelectedTier(tier.tier)}
-                                        >
-                                            <h3>{tier.name || tier.tier}</h3>
-                                            <div className="credits">{tier.credits} Credits</div>
-                                            <div className="price">{tier.price_display || '-'}</div>
-                                            <div className="help-text" style={{ marginTop: '6px' }}>
-                                                Unit: {tier.unit_price_display || '-'}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                {loadingTiers && <div className="help-text">Loading pricing...</div>}
-                                {!loadingTiers && tiers.length === 0 && (
-                                    <div className="help-text">No payment tiers available.</div>
-                                )}
-                            </div>
-
-                            {catalog && (
-                                <div className="form-group">
-                                    <label>Stripe Catalog</label>
-                                    <div className="help-text">Product ID: {catalog.product_id || 'n/a'}</div>
-                                    <div className="help-text">Price ID: {catalog.price_id || 'n/a'}</div>
-                                    <div className="help-text">Unit Price: {catalog.unit_price_display || 'n/a'}</div>
-                                </div>
-                            )}
-                            
-                            <div className="form-group">
-                                <label>Authenticated Email</label>
-                                <div className="help-text">
-                                    {customerEmail ? `Receipt will be sent to ${customerEmail}` : 'Sign in with Google to use your account email for checkout.'}
-                                </div>
-                            </div>
-                            
-                            <div className="button-group">
-                                <button type="submit" className="btn-primary" disabled={loading || loadingTiers || tiers.length === 0}>
-                                    {loading ? (
-                                        <>
-                                            <span className="loader"></span> Processing...
-                                        </>
-                                    ) : (
-                                        '💳 Proceed to Payment'
-                                    )}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </>
-            );
-        }
-        
-        ReactDOM.render(<App />, document.getElementById('root'));
-    </script>
+    __RUNTIME_CONFIG_SCRIPT__
+    <script src="/static/app.js"></script>
 </body>
 </html>
 """
@@ -1679,6 +799,8 @@ HTML_TEMPLATE = """
 
 frontend_app = FastAPI(title="lighter0-frontend", version="1.0.0")
 frontend_static_dir = os.path.join(os.path.dirname(__file__), "frontend")
+checkout_success_page = os.path.join(frontend_static_dir, "checkout_success.html")
+checkout_failed_page = os.path.join(frontend_static_dir, "checkout_failed.html")
 if os.path.isdir(frontend_static_dir):
     frontend_app.mount("/static", StaticFiles(directory=frontend_static_dir), name="static")
 
@@ -1686,13 +808,47 @@ if os.path.isdir(frontend_static_dir):
 @frontend_app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve the main frontend HTML with React UI."""
-    return HTML_TEMPLATE
+    return (
+        HTML_TEMPLATE
+        .replace("__RUNTIME_CONFIG_SCRIPT__", _runtime_config_script())
+        .replace("__ADMIN_CONTACT_NAME__", ADMIN_CONTACT_NAME)
+        .replace("__ADMIN_CONTACT_EMAIL__", ADMIN_CONTACT_EMAIL)
+    )
 
 
 @frontend_app.get("/index.html", response_class=HTMLResponse)
 async def index():
     """Serve the main frontend HTML with React UI."""
-    return HTML_TEMPLATE
+    return (
+        HTML_TEMPLATE
+        .replace("__RUNTIME_CONFIG_SCRIPT__", _runtime_config_script())
+        .replace("__ADMIN_CONTACT_NAME__", ADMIN_CONTACT_NAME)
+        .replace("__ADMIN_CONTACT_EMAIL__", ADMIN_CONTACT_EMAIL)
+    )
+
+
+@frontend_app.get("/checkout/success")
+async def checkout_success_redirect_page():
+    """Serve checkout success redirect page from frontend static directory."""
+    if os.path.isfile(checkout_success_page):
+        return FileResponse(checkout_success_page, media_type="text/html")
+    return HTMLResponse('<meta http-equiv="refresh" content="0; url=/?checkout=success">')
+
+
+@frontend_app.get("/checkout/cancel")
+async def checkout_cancel_redirect_page():
+    """Backward-compatible alias for failed checkout route."""
+    if os.path.isfile(checkout_failed_page):
+        return FileResponse(checkout_failed_page, media_type="text/html")
+    return HTMLResponse('<meta http-equiv="refresh" content="0; url=/?checkout=failed">')
+
+
+@frontend_app.get("/checkout/failed")
+async def checkout_failed_redirect_page():
+    """Serve checkout failed redirect page from frontend static directory."""
+    if os.path.isfile(checkout_failed_page):
+        return FileResponse(checkout_failed_page, media_type="text/html")
+    return HTMLResponse('<meta http-equiv="refresh" content="0; url=/?checkout=failed">')
 
 
 if __name__ == "__main__":
